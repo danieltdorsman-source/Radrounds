@@ -1,72 +1,250 @@
 (()=>{'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function page(id){$$('.page').forEach(x=>x.classList.toggle('active',x.id===id));$$('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===id));location.hash=id==='home'?'':id;$('#navlinks')?.classList.remove('open');scrollTo({top:0,behavior:'instant'});if(id==='anatomy')renderAnatomy();if(id==='stroke')renderStroke()}
-$$('[data-page]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();page(b.dataset.page)}));$('#hamb').onclick=()=>$('#navlinks').classList.toggle('open');const hash=location.hash.slice(1);if(hash&&$('#'+hash))page(hash);
+const state={page:'scan',slice:21,dragY:null,atlasOn:true,manifest:[],protocol:'cchr'};
 
-const imgs={};Object.entries(ATLAS).forEach(([k,src])=>{const im=new Image();im.crossOrigin='anonymous';im.src=src;imgs[k]=im});
-const [NX,NY,NZ]=CT_MANIFEST.dims;let vol=new Uint8Array(0),validY=[],volumeStatus='loading';
-function nonblankYs(){const a=[];if(!vol.length)return a;for(let y=0;y<NY;y++){let nz=0;for(let z=0;z<NZ;z+=4)for(let x=0;x<NX;x+=4)nz+=vol[x+NX*y+NX*NY*z]>2;if(nz>30)a.push(y)}return a}
-fetch(CT_URL).then(r=>{if(!r.ok)throw Error(r.status);return r.arrayBuffer()}).then(b=>{vol=new Uint8Array(b);validY=nonblankYs();volumeStatus='ready';const st=studies.find(x=>x.id==='brainVol');st.count=Math.max(1,validY.length);st.sub=validY.length+' source-covered levels';setupStudies();renderAnatomy();renderStroke()}).catch(e=>{console.error(e);volumeStatus='error'});
+function showPage(id){
+ state.page=id;
+ $$('.page').forEach(p=>p.classList.toggle('active',p.id===id));
+ $$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+ history.replaceState(null,'','#'+id);
+ if(id==='scan') setTimeout(()=>$('#viewer')?.focus(),0);
+}
+$$('.navbtn').forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+if(location.hash==='#request')showPage('request');
 
-function renderAtlas(canvas,key,frame,cols=6,rows=4,opt={}){const img=imgs[key],ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);if(!img||!img.complete||!img.naturalWidth){if(img)img.onload=()=>renderAtlas(canvas,key,frame,cols,rows,opt);ctx.fillStyle='#9ce8cb';ctx.font='600 16px system-ui';ctx.textAlign='center';ctx.fillText('Loading real CT stack…',canvas.width/2,canvas.height/2);return}const fw=img.naturalWidth/cols,fh=img.naturalHeight/rows,sx=(frame%cols)*fw,sy=Math.floor(frame/cols)*fh;const off=document.createElement('canvas');off.width=fw;off.height=fh;const oc=off.getContext('2d');oc.drawImage(img,sx,sy,fw,fh,0,0,fw,fh);if(opt.invert){oc.globalCompositeOperation='difference';oc.fillStyle='#fff';oc.fillRect(0,0,fw,fh);oc.globalCompositeOperation='source-over'}const sc=Math.min(canvas.width/fw,canvas.height/fh)*.96*(opt.zoom||1);ctx.save();ctx.translate(canvas.width/2+(opt.panX||0),canvas.height/2+(opt.panY||0));ctx.drawImage(off,-fw*sc/2,-fh*sc/2,fw*sc,fh*sc);ctx.restore()}
-function renderVolume(canvas,y,opt={}){const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);if(!vol.length||!validY.length){ctx.fillStyle='#9ce8cb';ctx.font='600 16px system-ui';ctx.textAlign='center';ctx.fillText(volumeStatus==='error'?'Volume unavailable':'Loading full CT volume…',canvas.width/2,canvas.height/2);return}y=Math.max(0,Math.min(NY-1,y|0));const tmp=document.createElement('canvas');tmp.width=NX;tmp.height=NZ;const tc=tmp.getContext('2d'),im=tc.createImageData(NX,NZ);let p=0;for(let row=0;row<NZ;row++){const z=NZ-1-row;for(let x=0;x<NX;x++){let v=vol[x+NX*y+NX*NY*z];if(opt.invert)v=255-v;im.data[p++]=v;im.data[p++]=v;im.data[p++]=v;im.data[p++]=255}}tc.putImageData(im,0,0);const sc=Math.min(canvas.width/NX,canvas.height/NZ)*.94*(opt.zoom||1);ctx.save();ctx.translate(canvas.width/2+(opt.panX||0),canvas.height/2+(opt.panY||0));ctx.imageSmoothingEnabled=true;ctx.drawImage(tmp,-NX*sc/2,-NZ*sc/2,NX*sc,NZ*sc);ctx.restore()}
+function levelFor(n){return RADROUNDS.sliceLevels.find(x=>n<=x.max)||RADROUNDS.sliceLevels.at(-1)}
+function setLevel(){
+ const L=levelFor(state.slice);
+ $('#sliceNumber').textContent=state.slice;
+ $('#sliceRange').value=state.slice;
+ $('#sliceLeft').textContent=String(state.slice).padStart(2,'0');
+ $('#sliceLevel').textContent=L.title.toLowerCase();
+ $('#levelTitle').textContent=L.title;
+ $('#levelText').textContent=L.text;
+ $('#levelTags').innerHTML=L.tags.map(t=>'<span>'+t+'</span>').join('');
+}
+function imgURL(n){return RADROUNDS.commonsSlice(n)}
+function preload(n){[n-2,n-1,n+1,n+2].filter(x=>x>=1&&x<=41).forEach(x=>{const im=new Image();im.src=imgURL(x)})}
+function setSlice(n){
+ state.slice=Math.max(1,Math.min(41,n|0));
+ const img=$('#ctImg');
+ $('#loadState').textContent='loading…';
+ img.onload=()=>{$('#loadState').textContent='646×468 · original PNG'};
+ img.onerror=()=>{$('#loadState').textContent='image retry';setTimeout(()=>{img.src=imgURL(state.slice)+'?t='+Date.now()},800)};
+ img.src=imgURL(state.slice);
+ img.alt='Normal non-contrast CT head, axial slice '+state.slice+' of 41';
+ setLevel();preload(state.slice);clearHover();
+}
+$('#sliceRange').oninput=e=>setSlice(+e.target.value);
+$('#viewer').addEventListener('wheel',e=>{e.preventDefault();setSlice(state.slice+(e.deltaY>0?1:-1))},{passive:false});
+$('#viewer').addEventListener('keydown',e=>{
+ if(['ArrowDown','ArrowRight','PageDown'].includes(e.key)){e.preventDefault();setSlice(state.slice+1)}
+ if(['ArrowUp','ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();setSlice(state.slice-1)}
+ if(e.key==='Home'){e.preventDefault();setSlice(1)}
+ if(e.key==='End'){e.preventDefault();setSlice(41)}
+});
+$('#stage').addEventListener('pointerdown',e=>{state.dragY=e.clientY;$('#stage').setPointerCapture?.(e.pointerId)});
+$('#stage').addEventListener('pointermove',e=>{
+ if(state.dragY!==null){
+   const d=e.clientY-state.dragY;
+   if(Math.abs(d)>11){setSlice(state.slice+(d>0?1:-1));state.dragY=e.clientY}
+ } else hoverAnatomy(e);
+});
+window.addEventListener('pointerup',()=>state.dragY=null);
+$('#stage').addEventListener('pointerleave',clearHover);
+$('#atlasToggle').onchange=e=>{state.atlasOn=e.target.checked;if(!state.atlasOn)clearHover()};
+setSlice(state.slice);
 
-let heroPos=12;const hero=$('#heroCanvas');function heroDraw(){renderAtlas(hero,'adult-head-plain-v1.webp',heroPos,4,6);$('#heroSlice').textContent='SLICE '+(heroPos+1)+'/24'}function heroMove(d){heroPos=Math.max(0,Math.min(23,heroPos+d));heroDraw()}heroDraw();$('#heroViewer').addEventListener('wheel',e=>{e.preventDefault();heroMove(e.deltaY>0?1:-1)},{passive:false});let hd=null;$('#heroViewer').addEventListener('pointerdown',e=>hd=e.clientY);window.addEventListener('pointerup',()=>hd=null);window.addEventListener('pointermove',e=>{if(hd!==null&&Math.abs(e.clientY-hd)>7){heroMove(e.clientY>hd?1:-1);hd=e.clientY}});
+fetch(RADROUNDS.anatomyManifest).then(r=>r.json()).then(d=>{
+ state.manifest=(d.parts||[]).filter(p=>p.bbox&&p.centroid);
+ $('#loadState').textContent='646×468 · atlas ready';
+}).catch(()=>{state.manifest=[]});
 
-const studies=[
-{id:'headRef',name:'Head CT — high-res',sub:'24 real CC0 frames',kind:'atlas',asset:'adult-head-plain-v1.webp',count:24,cols:4,rows:6,preset:'NCCT · 4 mm pre-windowed',note:'Mikael Häggström normal head CT teaching series, CC0.',labels:[['Posterior fossa','Temporal bones','Brainstem'],['Basal cisterns','Sylvian fissures','Temporal lobes'],['Basal ganglia','Internal capsules','Lateral ventricles'],['Centrum semiovale','Cortex','Falx']]},
-{id:'brainVol',name:'Head CT — volumetric',sub:'loading real volume',kind:'volume',count:1,preset:'Brain display · source grid',note:'NLM Visible Human head grid via Neuroaxis Atlas. Source-covered levels only.',labels:[['Skull base','Cerebellum / brainstem','Basal cisterns'],['Temporal lobes','Basal ganglia','Third ventricle'],['Lateral ventricles','Deep grey nuclei','Insular cortex'],['Centrum semiovale','Cortical sulci','Falx']]},
-{id:'chest',name:'Chest CT — lung',sub:'24 real frames',kind:'atlas',asset:'chest-plain-v1.webp',count:24,cols:6,rows:4,preset:'Lung · W1500 / L−600',note:'AortaSeg-60 Nat_07 adult noncontrast reference sequence.',labels:[['Lungs','Pleural surfaces','Vertebral body'],['Main bronchi','Pulmonary vessels','Descending aorta'],['Hila','Heart / mediastinum','Fissures'],['Upper lungs','Trachea','Great vessels']]},
-{id:'abdomen',name:'Abdomen CT',sub:'24 real frames',kind:'atlas',asset:'abdomen-plain-v1.webp',count:24,cols:6,rows:4,preset:'Soft tissue · W400 / L40',note:'AortaSeg-60 Nat_07 adult abdominal reference sequence.',labels:[['Liver','Spleen','Stomach'],['Pancreas','Kidneys','Aorta / IVC'],['Bowel','Mesentery','Psoas muscles'],['Lower abdomen','Bowel','Pelvic brim']]},
-{id:'renal',name:'Renal levels',sub:'24 real frames',kind:'atlas',asset:'urinary-plain-v1.webp',count:24,cols:6,rows:4,preset:'Soft tissue · W400 / L40',note:'Real renal-level CT reference stack; not a pathology case.',labels:[['Kidneys','Renal sinus','Psoas'],['Ureters where visible','Aorta / IVC','Bowel'],['Lower poles','Retroperitoneum','Lumbar spine'],['Pelvic ureter course','Iliac vessels','Bowel']]},
-{id:'pelvis',name:'Lumbar / pelvis',sub:'24 real frames',kind:'atlas',asset:'lumbar-pelvis-plain-v1.webp',count:24,cols:6,rows:4,preset:'Bone display · W1600 / L450',note:'Real lumbar/pelvic CT reference stack.',labels:[['Lumbar vertebra','Psoas','Posterior elements'],['Sacrum','Iliac bones','SI joints'],['Acetabula','Pelvic organs','Gluteal muscles'],['Femoral heads','Pelvic ring','Soft tissues']]},
-{id:'aorta',name:'Aortic CTA',sub:'24 real frames',kind:'atlas',asset:'aorta-cta-v1.webp',count:24,cols:6,rows:4,preset:'CTA reference',note:'Real aortic CTA acquisition reference; vessel anatomy teaching only.',labels:[['Aorta','Branch vessels','Mediastinum'],['Descending aorta','Pulmonary arteries','Vertebral body'],['Abdominal aorta','Visceral branches','IVC'],['Aortic bifurcation','Iliac arteries','Pelvic vessels']]},
-{id:'neckcta',name:'Head / neck CTA',sub:'24 real frames',kind:'atlas',asset:'adult-neck-cta-v1.webp',count:24,cols:6,rows:4,preset:'CTA reference',note:'Real head/neck CTA reference sequence.',labels:[['Carotids','Vertebrals','Airway'],['Carotid bifurcation','Jugular veins','C-spine'],['Intracranial ICA','Basilar artery','Skull base'],['Circle of Willis region','MCA / ACA origins','Venous structures']]}
-];
-let anat={study:0,slice:12,invert:false,labels:true,zoom:1,panX:0,panY:0};
-function setupStudies(){const el=$('#studyList');if(!el)return;el.innerHTML='<h4>Study</h4>'+studies.map((s,i)=>'<button class="study '+(i===anat.study?'active':'')+'" data-study="'+i+'">'+s.name+'<small>'+s.sub+'</small></button>').join('');$$('[data-study]').forEach(b=>b.onclick=()=>{anat.study=+b.dataset.study;anat.slice=Math.floor(studies[anat.study].count/2);setupStudies();renderAnatomy()})}
-function levelLabels(s,i){return s.labels[Math.min(3,Math.floor((i/Math.max(1,s.count))*4))]||s.labels[0]}
-function renderAnatomy(){const c=$('#scanCanvas');if(!c)return;const s=studies[anat.study];anat.slice=Math.max(0,Math.min(Math.max(0,s.count-1),anat.slice));if(s.kind==='volume')renderVolume(c,validY[anat.slice]??0,anat);else renderAtlas(c,s.asset,anat.slice,s.cols,s.rows,anat);$('#sliceRange').max=Math.max(0,s.count-1);$('#sliceRange').value=anat.slice;$('#sliceVal').textContent=s.kind==='volume'&&volumeStatus!=='ready'?'Loading…':(anat.slice+1)+' / '+s.count;$('#stackProgress').style.width=(s.count?((anat.slice+1)/s.count*100):0)+'%';$('#presetMeta').textContent=s.preset;$('#sourceNote').textContent=s.note;$('#scanMeta').textContent=s.name+'\nAXIAL · REFERENCE';$('#scanRight').textContent='Slice '+(anat.slice+1)+'/'+s.count+'\nR ← → L';$('#labelList').innerHTML=levelLabels(s,anat.slice).map(x=>'<li>'+x+'</li>').join('');$('#labelBox').classList.toggle('on',anat.labels);buildQuiz(s)}
-function moveSlice(d){anat.slice=Math.max(0,Math.min(studies[anat.study].count-1,anat.slice+d));renderAnatomy()}
-setupStudies();renderAnatomy();$('#sliceRange').oninput=e=>{anat.slice=+e.target.value;renderAnatomy()};$('#labelsBtn').onclick=()=>{anat.labels=!anat.labels;$('#labelsBtn').classList.toggle('active',anat.labels);renderAnatomy()};$('#invertBtn').onclick=()=>{anat.invert=!anat.invert;$('#invertBtn').classList.toggle('active',anat.invert);renderAnatomy()};$('#resetBtn').onclick=()=>{anat.invert=false;anat.slice=Math.floor(studies[anat.study].count/2);$('#invertBtn').classList.remove('active');renderAnatomy()};$('#pacs').addEventListener('wheel',e=>{e.preventDefault();moveSlice(e.deltaY>0?1:-1)},{passive:false});$('#pacs').addEventListener('keydown',e=>{if(['ArrowRight','ArrowDown'].includes(e.key)){e.preventDefault();moveSlice(1)}if(['ArrowLeft','ArrowUp'].includes(e.key)){e.preventDefault();moveSlice(-1)}});
-let sd=null;$('#scanCanvas').addEventListener('pointerdown',e=>sd=e.clientY);window.addEventListener('pointermove',e=>{if(sd!==null&&Math.abs(e.clientY-sd)>8){moveSlice(e.clientY>sd?1:-1);sd=e.clientY}});window.addEventListener('pointerup',()=>sd=null);
-function buildQuiz(s){const vals=levelLabels(s,anat.slice),correct=vals[0],pool=['Basal ganglia','Pleural surface','Pancreas','Aortic bifurcation','Cerebellum','Psoas muscles','Carotid artery','Lateral ventricle'].filter(x=>!vals.includes(x));const opts=[correct,pool[(anat.slice+anat.study)%pool.length],pool[(anat.slice+anat.study+3)%pool.length]].sort(()=>Math.random()-.5);$('#quizQ').textContent='Which structure/group belongs on your review at this level?';$('#quizOpts').innerHTML=opts.map(o=>'<button class="tool qopt" data-ok="'+(o===correct)+'">'+o+'</button>').join('');$('#quizAnswer').className='answer';$$('.qopt').forEach(b=>b.onclick=()=>{$('#quizAnswer').textContent=b.dataset.ok==='true'?'Correct — '+correct+'.':'Review this level: '+vals.join(', ')+'.';$('#quizAnswer').className='answer show'})}
+function humanize(slug){
+ let s=slug.replace(/^(ctx|nuc|vasc|vent|tel|tract)-/,'').replace(/-l$/,' · left').replace(/-r$/,' · right');
+ const map={mca:'middle cerebral artery',aca:'anterior cerebral artery',ica:'internal carotid artery',pca:'posterior cerebral artery',aica:'anterior inferior cerebellar artery',pica:'posterior inferior cerebellar artery',sca:'superior cerebellar artery',pag:'periaqueductal grey',dmv:'dorsal motor nucleus of vagus',vpl:'ventral posterolateral thalamic nucleus',vpm:'ventral posteromedial thalamic nucleus',lgn:'lateral geniculate nucleus',mgn:'medial geniculate nucleus',snc:'substantia nigra pars compacta',snr:'substantia nigra pars reticulata',pprf:'paramedian pontine reticular formation'};
+ s=s.split('-').map(x=>map[x]||x).join(' ');
+ return s.replace(/\b\w/g,m=>m.toUpperCase());
+}
+function boxVol(b){return Math.max(.01,(b.max[0]-b.min[0])*(b.max[1]-b.min[1])*(b.max[2]-b.min[2]))}
+function anatomyAt(u,v){
+ // Atlas-correlated approximation: image right = patient left (+x), superior slice increases +y, image top = anterior (+z)
+ const x=(u-.5)*112;
+ const y=-48+((state.slice-1)/40)*142;
+ const z=(.5-v)*146;
+ if(!state.manifest.length)return fallbackAnatomy();
+ let cand=state.manifest.filter(p=>x>=p.bbox.min[0]&&x<=p.bbox.max[0]&&y>=p.bbox.min[1]&&y<=p.bbox.max[1]&&z>=p.bbox.min[2]&&z<=p.bbox.max[2]);
+ cand=cand.sort((a,b)=>boxVol(a.bbox)-boxVol(b.bbox)).slice(0,8);
+ if(!cand.length)return fallbackAnatomy();
+ return cand.map(p=>({name:humanize(p.slug),kind:p.kind||'structure',slug:p.slug}));
+}
+function fallbackAnatomy(){
+ const L=levelFor(state.slice);
+ return L.tags.slice(0,5).map((x,i)=>({name:x.replace(/\b\w/g,m=>m.toUpperCase()),kind:i?'regional landmark':'level anatomy'}));
+}
+function hoverAnatomy(e){
+ if(!state.atlasOn)return;
+ const img=$('#ctImg'),rect=img.getBoundingClientRect();
+ if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom){clearHover();return}
+ const u=(e.clientX-rect.left)/rect.width,v=(e.clientY-rect.top)/rect.height;
+ const list=anatomyAt(u,v);
+ const dot=$('#hoverDot'),stageRect=$('#stage').getBoundingClientRect();
+ dot.style.left=(e.clientX-stageRect.left-4)+'px';dot.style.top=(e.clientY-stageRect.top-4)+'px';dot.style.display='block';
+ const primary=list[0]?.name||'No atlas match';
+ $('#tipTitle').textContent=primary;
+ $('#tipSub').textContent='Slice '+state.slice+' · '+(u<.5?'patient right':'patient left')+' · atlas-correlated candidate';
+ $('#tipList').innerHTML=list.slice(1).map(x=>'<span class="tipchip">'+x.name+'</span>').join('');
+ $('#sidePrimary').textContent=primary;
+ $('#sideCandidates').innerHTML=list.slice(1).map(x=>'<div class="candidate">'+x.name+'<small>'+x.kind+'</small></div>').join('')||'<div class="candidate">No additional structure candidate at this point.</div>';
+}
+function clearHover(){
+ $('#hoverDot').style.display='none';
+ $('#tipTitle').textContent='Move over the scan';
+ $('#tipSub').textContent='Detailed candidate structures appear here.';
+ $('#tipList').innerHTML='';
+ $('#sidePrimary').textContent='—';
+ $('#sideCandidates').innerHTML='';
+}
 
-const cases=[
-{id:'lvo',cat:'Neuro',title:'Large-vessel occlusion stroke',mod:'NCCT + CTA',urg:'Time-critical',ref:'brainVol',summary:'Exclude haemorrhage, identify early ischaemic change, then define the vascular occlusion question.',find:'Haemorrhage; loss of grey–white differentiation; sulcal effacement; hyperdense artery; CTA cut-off or asymmetric vessel filling.',question:'Intracranial haemorrhage? Early ischaemic change? Large-vessel occlusion and site?',action:'Activate the local stroke pathway early and escalate for specialist/Telestroke review.'},
-{id:'ich',cat:'Neuro',title:'Intracerebral haemorrhage',mod:'NCCT brain',urg:'Immediate escalation',ref:'headRef',summary:'Acute blood is typically hyperdense on noncontrast CT; location and mass effect matter.',find:'Blood location, size, intraventricular extension, hydrocephalus, midline shift and herniation signs.',question:'Acute haemorrhage? Location, mass effect, IVH or hydrocephalus?',action:'Urgent senior/stroke/neurosurgical escalation; follow local anticoagulant reversal and ICH pathways.'},
-{id:'early',cat:'Neuro',title:'Early ischaemic stroke',mod:'NCCT brain',urg:'Time-critical',ref:'brainVol',summary:'A subtle or initially normal NCCT does not exclude acute ischaemia.',find:'Loss of grey–white differentiation, insular ribbon obscuration, lentiform obscuration, sulcal effacement, hyperdense artery.',question:'Haemorrhage? Early ischaemic change or established infarction?',action:'Pair NCCT with the clinical time window and required vascular imaging.'},
-{id:'pe',cat:'Chest',title:'Pulmonary embolism',mod:'CTPA',urg:'Urgent if unstable',ref:'chest',summary:'CTPA is a dedicated pulmonary arterial examination, not simply a routine contrast CT chest.',find:'Pulmonary arterial filling defects, right-heart strain features, infarction/effusion and alternative thoracic pathology.',question:'Pulmonary embolism? Central clot burden? Right-heart strain features?',action:'If unstable, manage and escalate as a resuscitation problem while imaging decisions are made.'},
-{id:'ptx',cat:'Chest',title:'Pneumothorax',mod:'CXR ± CT',urg:'Clinical urgency first',ref:'chest',summary:'Usually a radiographic diagnosis; CT is mainly for uncertainty or complex anatomy.',find:'Pleural line, absent peripheral markings, size/tension clues and associated injury.',question:'Pneumothorax? Tension physiology? Associated thoracic injury?',action:'Do not delay emergency decompression for imaging if the clinical picture is tension pneumothorax.'},
-{id:'aaa',cat:'Abdomen',title:'Ruptured abdominal aortic aneurysm',mod:'CTA / CT A/P',urg:'Emergency',ref:'aorta',summary:'Aortic calibre, mural findings and retroperitoneal blood are key.',find:'Aneurysm, retroperitoneal haematoma, active extravasation, focal wall discontinuity and branch anatomy.',question:'AAA with rupture or impending rupture? Anatomy relevant to vascular management?',action:'Urgent vascular/surgical escalation; imaging pathway depends on stability.'},
-{id:'sbo',cat:'Abdomen',title:'Small bowel obstruction',mod:'CT abdomen/pelvis',urg:'Urgent if complicated',ref:'abdomen',summary:'The important question is obstruction plus whether there are signs of ischaemia or closed loop.',find:'Dilated small bowel, transition point, closed-loop configuration, reduced enhancement, mesenteric oedema, pneumatosis or free gas.',question:'SBO? Transition point? Closed loop, ischaemia or perforation?',action:'Escalate urgently for peritonitis, strangulation, ischaemia or perforation.'},
-{id:'appendix',cat:'Abdomen',title:'Appendicitis',mod:'US / CT depending context',urg:'Clinical pathway',ref:'abdomen',summary:'Imaging choice depends on age, pregnancy, local pathway and pre-test probability.',find:'Appendiceal dilatation, wall thickening/enhancement, periappendiceal inflammation, appendicolith, collection or perforation.',question:'Appendicitis? Complication or alternative cause?',action:'Use local surgical and imaging pathways; avoid treating CT as a substitute for clinical review.'},
-{id:'ces',cat:'Spine',title:'Cauda equina syndrome',mod:'MRI spine',urg:'Emergency pathway',ref:'pelvis',summary:'The key imaging test for suspected compressive cauda equina pathology is urgent MRI.',find:'Canal compromise and the causative lesion; CT or plain films do not exclude CES.',question:'Compressive cauda equina pathology and level/cause?',action:'Urgent spinal pathway and MRI; communicate bladder/bowel/saddle symptoms and objective deficit.'}
-];
-let filter='All';function refStudy(id){return studies.find(x=>x.id===id)||studies[0]}
-function drawCase(canvas,c){const s=refStudy(c.ref);if(s.kind==='volume')renderVolume(canvas,validY[Math.floor(validY.length*.55)]??0);else renderAtlas(canvas,s.asset,Math.floor(s.count*.52),s.cols,s.rows)}
-function renderCases(){const cats=['All',...new Set(cases.map(c=>c.cat))];$('#caseFilters').innerHTML=cats.map(x=>'<button class="filter '+(x===filter?'active':'')+'" data-filter="'+x+'">'+x+'</button>').join('');$$('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;renderCases()});const list=filter==='All'?cases:cases.filter(c=>c.cat===filter);$('#caseGrid').innerHTML=list.map(c=>'<article class="case" data-case="'+c.id+'"><div class="casevisual"><canvas width="512" height="300" id="cv-'+c.id+'"></canvas><span class="tag">'+c.mod+'</span><span class="refnote">reference anatomy</span></div><div class="casebody"><h3>'+c.title+'</h3><p>'+c.summary+'</p><div class="casefoot"><span>'+c.cat+'</span><span>'+c.urg+'</span></div></div></article>').join('');list.forEach(c=>drawCase($('#cv-'+c.id),c));$$('[data-case]').forEach(x=>x.onclick=()=>openCase(x.dataset.case))}
-function openCase(id){const c=cases.find(x=>x.id===id);$('#drawerContent').innerHTML='<div class="eyebrow">'+c.cat+' · '+c.mod+'</div><h2 style="margin:8px 0 10px">'+c.title+'</h2><p class="muted">'+c.summary+'</p><div class="drawergrid"><div class="fact"><b>What to look for</b><p>'+c.find+'</p></div><div class="fact"><b>Ask radiology</b><p>'+c.question+'</p></div><div class="fact"><b>What happens next</b><p>'+c.action+'</p></div><div class="fact"><b>JMO habit</b><p>State the time course, relevant physiology, key examination findings, treatment already given and exactly what result will change management.</p></div></div><div class="alert">Educational summary only. Current local protocols, senior review and the formal radiology report take precedence.</div>';$('#drawer').classList.add('open')}
-$('#closeDrawer').onclick=()=>$('#drawer').classList.remove('open');$('#drawer').addEventListener('click',e=>{if(e.target===$('#drawer'))$('#drawer').classList.remove('open')});renderCases();
-
-const stroke=[
-{title:'1 · NCCT',sub:'Blood first; then early ischaemia',type:'vol',body:'<h3>Start with the noncontrast CT.</h3><p>Ask first: <b>is there haemorrhage?</b> Then deliberately inspect grey–white differentiation, the insular ribbon, basal ganglia, sulci, ventricles and any hyperdense artery.</p><div class="callout">A normal-looking early NCCT does not exclude acute ischaemia. The clinical time window and vascular question still matter.</div>'},
-{title:'2 · CTA',sub:'Where is the vessel problem?',type:'cta',body:'<h3>Define the vascular question.</h3><p>Trace the carotid and vertebrobasilar systems into the intracranial circulation. Look for abrupt cut-off or convincing asymmetry rather than staring at one image.</p><div class="alert">The CTA shown here is a real teaching/reference acquisition, not a positive LVO case.</div>'},
-{title:'3 · Communicate',sub:'Time, deficit, imaging, next action',type:'text',body:'<h3>The handoff should make the clock visible.</h3><p>Include time/last known well, deficit, relevant anticoagulation/bleeding context, imaging status and exactly what specialist input you need.</p><div class="request">Acute focal neurological deficit. Last known well: [time]. Current deficit: [brief description / NIHSS if used locally]. NCCT: [key result]. CTA: [performed/pending; key result if confirmed]. Anticoagulation/major bleeding context: [detail]. Requesting urgent stroke specialist/Telestroke review and reperfusion-pathway advice.</div>'}
-];let strokeI=0,strokeSlice=0,ctaSlice=11;
-function setupStroke(){$('#strokeSteps').innerHTML=stroke.map((s,i)=>'<div class="step '+(i===strokeI?'active':'')+'" data-stroke="'+i+'"><b>'+s.title+'</b><small>'+s.sub+'</small></div>').join('');$$('[data-stroke]').forEach(x=>x.onclick=()=>{strokeI=+x.dataset.stroke;renderStroke()})}
-function renderStroke(){const s=stroke[strokeI],c=$('#strokeCanvas');if(!c)return;setupStroke();$('#strokeContent').innerHTML=s.body;if(s.type==='vol'){if(validY.length&&strokeSlice===0)strokeSlice=Math.floor(validY.length*.55);renderVolume(c,validY[strokeSlice]??0);$('#strokeMeta').textContent='REAL NCCT REFERENCE\nSlice '+(strokeSlice+1)+'/'+Math.max(1,validY.length)}else if(s.type==='cta'){renderAtlas(c,'adult-neck-cta-v1.webp',ctaSlice,6,4);$('#strokeMeta').textContent='REAL CTA REFERENCE\nFrame '+(ctaSlice+1)+'/24'}else{const x=c.getContext('2d');x.fillStyle='#020504';x.fillRect(0,0,c.width,c.height);x.fillStyle='#9ce8cb';x.font='700 40px system-ui';x.textAlign='center';x.fillText('CALL EARLY',256,235);x.fillStyle='#819a92';x.font='15px ui-monospace';x.fillText('time · deficit · imaging · next action',256,275);$('#strokeMeta').textContent='COMMUNICATION'}}
-$('#strokeCanvas').addEventListener('wheel',e=>{e.preventDefault();if(stroke[strokeI].type==='vol'&&validY.length)strokeSlice=Math.max(0,Math.min(validY.length-1,strokeSlice+(e.deltaY>0?1:-1)));else if(stroke[strokeI].type==='cta')ctaSlice=Math.max(0,Math.min(23,ctaSlice+(e.deltaY>0?1:-1)));renderStroke()},{passive:false});renderStroke();
-
-const scenario={stroke:{h:['last known well / onset','deficit + side','anticoagulants'],q:['haemorrhage?','LVO/site?','early ischaemic change?']},pe:{h:['onset + hypoxia','pre-test probability','DVT signs'],q:['pulmonary embolism?','right-heart strain?','alternative cause?']},abdo:{h:['pain site/onset','operations','peritonism/obs'],q:['obstruction?','perforation?','inflammation/collection?']},renal:{h:['side/radiation','haematuria','single kidney/fever'],q:['ureteric calculus?','size/location?','hydronephrosis?']},cauda:{h:['saddle symptoms','bladder/bowel change','objective weakness/reflexes'],q:['compressive cauda equina pathology?']},sepsis:{h:['source clues','cultures/antibiotics','recent procedure'],q:['occult source?','drainable collection?','complication?']},free:{h:['onset/timing','relevant treatment','key negatives'],q:['state the decision-changing question']}};
-function tips(){const s=scenario[$('#reqScenario').value];$('#historyTips').innerHTML=s.h.map(t=>'<span class="tip" data-target="reqHistory">+ '+t+'</span>').join('');$('#questionTips').innerHTML=s.q.map(t=>'<span class="tip" data-target="reqQuestion">+ '+t+'</span>').join('');$$('.tip').forEach(t=>t.onclick=()=>{const a=$('#'+t.dataset.target);a.value+=(a.value.trim()?'; ':'')+t.textContent.slice(2)})}$('#reqScenario').onchange=tips;tips();
-$('#buildReq').onclick=()=>{const study=$('#reqStudy').value,h=$('#reqHistory').value.trim(),e=$('#reqExam').value.trim(),l=$('#reqLabs').value.trim(),q=$('#reqQuestion').value.trim();$('#requestOut').textContent=study.toUpperCase()+'\n\nClinical history: '+(h||'[add concise history and timing]')+'\nRelevant exam/observations: '+(e||'[add relevant positives/negatives]')+'\nRelevant labs / safety context: '+(l||'[add relevant contrast/MRI safety context]')+'\n\nClinical question: '+(q||'[state what the scan needs to answer]')+'\n\nPlease correlate with prior imaging where relevant.'};$('#copyReq').onclick=async()=>{try{await navigator.clipboard.writeText($('#requestOut').textContent);$('#copyMsg').textContent='Copied'}catch(e){$('#copyMsg').textContent='Select and copy manually'}setTimeout(()=>$('#copyMsg').textContent='',1500)};
-
-const tools={
-scan:'<div class="guides"><article class="guide"><h3>Acute focal neurology</h3><p>Question: blood, established ischaemia and vessel occlusion. Follow the local stroke imaging pathway.</p></article><article class="guide"><h3>Suspected PE</h3><p>Question: pulmonary arterial thrombus and complications. CTPA is a dedicated protocol.</p></article><article class="guide"><h3>Renal colic</h3><p>Question: stone, site, size, obstruction and alternative diagnosis.</p></article><article class="guide"><h3>Possible cauda equina</h3><p>Question: compressive neural pathology. This is an urgent MRI pathway.</p></article></div>',
-call:'<div class="roundgrid"><div class="formpanel"><h3>Before you call radiology</h3><div class="check"><i>01</i><span>Patient location and how unwell they are.</span></div><div class="check"><i>02</i><span>One-line clinical story plus onset/timing.</span></div><div class="check"><i>03</i><span>Key examination change.</span></div><div class="check"><i>04</i><span>Exact imaging question and urgency.</span></div><div class="check"><i>05</i><span>Relevant contrast/MRI safety context.</span></div></div><div class="outputpanel"><div class="request">Hi, I’m the JMO/RMO from [ward/ED]. The key issue is [one line]. Timing is [x]. Examination/observations: [key findings]. I’m concerned about [diagnosis]. We’re asking whether [study] is appropriate/urgent and whether you recommend a different protocol.</div></div></div>',
-report:'<div class="guides"><article class="guide"><h3>No acute intracranial abnormality</h3><p>This does not mean no neurological disease; it means no acute structural CT finding was reported.</p></article><article class="guide"><h3>Indeterminate / correlate clinically</h3><p>Ask what uncertainty remains and whether follow-up or another modality is needed.</p></article><article class="guide"><h3>Incidental finding</h3><p>Read the recommendation, establish ownership and close the follow-up loop.</p></article><article class="guide"><h3>Critical finding</h3><p>Document who received the result, when, what action occurred and who owns the next step.</p></article></div>',
-safety:'<div class="guides"><article class="guide"><h3>Iodinated contrast</h3><p>Consider prior severe reaction, renal context where relevant, urgency/benefit, pregnancy where relevant and current local policy.</p></article><article class="guide"><h3>MRI</h3><p>Clarify devices/metal, prior surgery, foreign-body risk, ability to lie still and urgency. Device-specific MRI conditions matter.</p></article></div><div class="alert">Use current RANZCR and local guidance for real patient decisions.</div>',
-critical:'<div class="roundgrid"><div class="formpanel"><h3>Critical result loop</h3><div class="check"><i>01</i><span>Read the report / speak with radiology if needed.</span></div><div class="check"><i>02</i><span>Identify who must act now.</span></div><div class="check"><i>03</i><span>Escalate based on physiology and diagnosis.</span></div><div class="check"><i>04</i><span>Document time, recipient, advice and action.</span></div><div class="check"><i>05</i><span>Reassess and confirm the plan occurred.</span></div></div><div class="outputpanel"><div class="request">Imaging result: [critical finding]. Radiology communicated at [time]. [Senior/specialty] notified at [time]. Immediate plan: [action]. Patient currently: [status]. Outstanding: [next step], owned by [team/person].</div></div></div>'
-};Object.entries(tools).forEach(([k,v])=>$('#tool-'+k).innerHTML=v);$$('[data-tool]').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.toggle('active',x===b));$$('.toolpanel').forEach(x=>x.classList.remove('active'));$('#tool-'+b.dataset.tool).classList.add('active')});
+const P=RADROUNDS.protocols;
+function protocolById(id){return P.find(p=>p.id===id)}
+function renderProtocolList(){
+ $('#protocolList').innerHTML=P.map(p=>'<button class="protocolbtn '+(p.id===state.protocol?'active':'')+'" data-protocol="'+p.id+'"><b>'+p.title+'</b><small>'+p.category+'</small></button>').join('');
+ $$('[data-protocol]').forEach(b=>b.onclick=()=>{state.protocol=b.dataset.protocol;renderProtocolList();renderProtocol()});
+}
+function field(name,label,pts=0,group='crit'){
+ return '<div class="criterion"><label><input type="checkbox" data-group="'+group+'" data-name="'+name+'" data-pts="'+pts+'"><span>'+label+'</span></label>'+(pts?'<span class="pts">'+(pts>0?'+':'')+pts+'</span>':'')+'</div>';
+}
+function input(name,label,type='text',placeholder=''){
+ return '<div class="calcinput"><span>'+label+'</span><input data-input="'+name+'" type="'+type+'" placeholder="'+placeholder+'"></div>';
+}
+function select(name,label,opts){
+ return '<div class="calcinput"><span>'+label+'</span><select data-input="'+name+'">'+opts.map(([v,t])=>'<option value="'+v+'">'+t+'</option>').join('')+'</select></div>';
+}
+function renderCalculator(p){
+ let h='';
+ if(p.type==='points'){
+   h='<div class="calcsection"><div class="calctitle">CANADIAN CT HEAD RULE</div>'+p.fields.map((x,i)=>field('c'+i,x[0],x[1])).join('')+'</div>';
+ }
+ if(p.type==='cspine'){
+   h='<div class="calcsection"><div class="calctitle">STEP 1 · HIGH-RISK FACTORS</div>'+field('age65','Age ≥65')+field('danger','Dangerous mechanism')+field('para','Paraesthesia in extremities')+'</div>'+
+     '<div class="calcsection"><div class="calctitle">STEP 2 · LOW-RISK FACTORS ALLOWING ROM ASSESSMENT</div>'+field('rear','Simple rear-end MVC')+field('sitting','Sitting position in ED')+field('ambulatory','Ambulatory at any time')+field('delayed','Delayed onset neck pain')+field('nomid','No midline C-spine tenderness')+'</div>'+
+     '<div class="calcsection"><div class="calctitle">STEP 3 · ACTIVE ROTATION</div>'+field('rotate','Able to rotate neck 45° left AND right')+'</div>';
+ }
+ if(p.type==='pe'){
+   h='<div class="calcsection"><div class="calctitle">WELLS PE</div>'+
+   field('dvt','Clinical signs of DVT',3,'wells')+field('likely','PE more likely than alternative diagnosis',3,'wells')+
+   field('hr','Heart rate >100',1.5,'wells')+field('immob','Immobilisation ≥3 days or surgery in previous 4 weeks',1.5,'wells')+
+   field('prior','Previous DVT/PE',1.5,'wells')+field('haem','Haemoptysis',1,'wells')+field('cancer','Active cancer',1,'wells')+'</div>'+
+   '<div class="calcsection"><div class="calctitle">PERC · ONLY IF CLINICALLY LOW RISK</div>'+
+   field('p_age','Age <50',0,'perc')+field('p_hr','Pulse <100',0,'perc')+field('p_sat','SaO₂ ≥95% on room air',0,'perc')+field('p_haem','No haemoptysis',0,'perc')+
+   field('p_est','No exogenous oestrogen',0,'perc')+field('p_vte','No prior VTE',0,'perc')+field('p_surg','No surgery/trauma requiring hospitalisation in past 4 weeks',0,'perc')+field('p_leg','No unilateral leg swelling',0,'perc')+'</div>'+
+   select('peLow','Clinician considers pre-test probability low enough for PERC?',[['no','No / unsure'],['yes','Yes']]);
+ }
+ if(p.type==='dvt'){
+   const fs=[['cancer','Active cancer'],['immob','Paralysis/paresis/recent plaster immobilisation'],['bed','Bedridden ≥3 days or major surgery within 12 weeks'],['tender','Localised tenderness along deep venous system'],['whole','Entire leg swollen'],['calf','Calf swelling ≥3 cm vs asymptomatic side'],['oedema','Pitting oedema confined to symptomatic leg'],['collat','Collateral superficial non-varicose veins'],['prior','Previously documented DVT']];
+   h='<div class="calcsection"><div class="calctitle">TWO-LEVEL WELLS DVT</div>'+fs.map(x=>field(x[0],x[1],1,'dvt')).join('')+field('alt','Alternative diagnosis at least as likely as DVT',-2,'dvt')+'</div>';
+ }
+ if(p.type==='ankle'){
+   h='<div class="calcsection"><div class="calctitle">ANKLE SERIES</div>'+field('latmal','Bone tenderness posterior edge/tip lateral malleolus')+field('medmal','Bone tenderness posterior edge/tip medial malleolus')+field('walk','Unable to bear weight both immediately AND for 4 steps at assessment')+'</div>'+
+   '<div class="calcsection"><div class="calctitle">FOOT SERIES</div>'+field('fifth','Bone tenderness at base of 5th metatarsal')+field('nav','Bone tenderness at navicular')+field('walk2','Unable to bear weight both immediately AND for 4 steps at assessment')+'</div>';
+ }
+ if(p.type==='redflags'){
+   h='<div class="calcsection"><div class="calctitle">URGENT NEURO / CES FEATURES</div>'+field('urine','New urinary retention/overflow or major bladder dysfunction')+field('saddle','Saddle/perineal sensory disturbance')+field('bilat','Bilateral or progressive motor deficit')+field('objective','Objective neurological deficit')+'</div>'+
+   '<div class="calcsection"><div class="calctitle">OTHER SERIOUS-PATHOLOGY RED FLAGS</div>'+field('cancer','Known/suspected malignancy')+field('infection','Fever, immunosuppression, IVDU or infection risk')+field('fracture','Significant trauma / osteoporosis / fracture risk')+'</div>';
+ }
+ if(p.type==='stroke'){
+   h='<div class="calcsection"><div class="calctitle">TIME-CRITICAL INFORMATION</div>'+input('lkw','Last known well / symptom onset','text','e.g. 14:10')+input('deficit','Deficit / NIHSS if used locally','text','e.g. right weakness + aphasia, NIHSS 12')+input('baseline','Baseline function','text','e.g. independent, mRS 0')+input('anticoag','Anticoagulation / bleeding context','text','drug + last dose if relevant')+'</div>';
+ }
+ if(p.type==='simple'){
+   h='<div class="calcsection"><div class="calctitle">REQUEST-QUALITY CHECK</div>'+p.prompts.map((x,i)=>field('s'+i,x)).join('')+'</div>';
+ }
+ if(p.type==='pregpe'){
+   h='<div class="calcsection"><div class="calctitle">PREGNANCY PE PATHWAY</div>'+field('dvt','Symptoms/signs of DVT')+field('cxr','Chest X-ray abnormal')+field('unstable','Clinical instability')+'</div>'+input('gest','Gestation','text','weeks');
+ }
+ $('#calculator').innerHTML=h;
+ $('#calculator').querySelectorAll('input,select').forEach(x=>x.addEventListener('change',updateRuleResult));
+}
+function checked(name){const x=$('[data-name="'+name+'"]');return !!x?.checked}
+function val(name){const x=$('[data-input="'+name+'"]');return x?.value?.trim()||''}
+function allChecked(group){const xs=$$('[data-group="'+group+'"]');return xs.length&&xs.every(x=>x.checked)}
+function updateRuleResult(){
+ const p=protocolById(state.protocol);let text='',cls='';
+ if(p.type==='points'){const any=$$('[data-group="crit"]').some(x=>x.checked);text=any?p.positive:p.negative;cls=any?'positive':'warn'}
+ else if(p.type==='cspine'){
+   const high=checked('age65')||checked('danger')||checked('para');
+   const low=checked('rear')||checked('sitting')||checked('ambulatory')||checked('delayed')||checked('nomid');
+   if(high){text='High-risk factor present — Canadian C-Spine Rule supports imaging.';cls='positive'}
+   else if(!low){text='No low-risk factor selected to allow safe ROM assessment — imaging is supported by the rule.';cls='positive'}
+   else if(checked('rotate')){text='Low-risk factor present and patient can actively rotate 45° left/right — rule does not support imaging, if fully applicable.';cls='warn'}
+   else{text='Low-risk factor present but active 45° rotation not confirmed — imaging is supported by the rule.';cls='positive'}
+ }
+ else if(p.type==='pe'){
+   const score=$$('[data-group="wells"]:checked').reduce((s,x)=>s+(+x.dataset.pts||0),0);
+   const likely=score>4;
+   const low=val('peLow')==='yes',perc=allChecked('perc');
+   text='Wells PE = '+score.toFixed(score%1?1:0)+' ('+(likely?'PE likely >4':'PE unlikely ≤4')+'). ';
+   if(low&&perc)text+='All 8 PERC criteria satisfied in a clinician-selected low-risk patient — PERC-negative; no further PE testing is supported by the rule.';
+   else if(low)text+='PERC is not negative because one or more criteria are not satisfied; proceed with the locally approved PE pathway (often D-dimer before imaging when appropriate).';
+   else text+='PERC is not being applied. Use the local pre-test probability + D-dimer/imaging pathway.';
+   cls=likely?'positive':'warn';
+ }
+ else if(p.type==='dvt'){
+   const score=$$('[data-group="dvt"]:checked').reduce((s,x)=>s+(+x.dataset.pts||0),0);
+   text='Wells DVT = '+score+'. '+(score>=2?'DVT likely (≥2): compression ultrasound pathway supported.':'DVT unlikely (<2): a negative D-dimer can exclude DVT in the validated population; follow local pathway.');
+   cls=score>=2?'positive':'warn';
+ }
+ else if(p.type==='ankle'){
+   const ankle=checked('latmal')||checked('medmal')||checked('walk');
+   const foot=checked('fifth')||checked('nav')||checked('walk2');
+   text=(ankle?'Ankle radiographs supported. ':'No ankle-series criterion selected. ')+(foot?'Foot radiographs supported.':'No foot-series criterion selected.');
+   cls=(ankle||foot)?'positive':'warn';
+ }
+ else if(p.type==='redflags'){
+   const urgent=checked('urine')||checked('saddle')||checked('bilat')||checked('objective');
+   const serious=checked('cancer')||checked('infection')||checked('fracture');
+   text=urgent?'Features concerning for cauda equina/neurological compression are selected — urgent spinal assessment and MRI pathway.':serious?'Serious-pathology red flag selected — imaging modality/urgency depends on suspected cause and local pathway.':'No red flag selected — uncomplicated acute low back pain generally does not require immediate imaging.';
+   cls=(urgent||serious)?'positive':'warn';
+ }
+ else if(p.type==='stroke'){text='Time-critical pathway: activate the local stroke process and ensure NCCT/CTA request contains exact timing, deficit, baseline and anticoagulation context.';cls='positive'}
+ else if(p.type==='pregpe'){
+   if(checked('dvt'))text='DVT symptoms/signs selected — KEMH guidance supports compression duplex ultrasound before further PE imaging.'; 
+   else if(checked('cxr')||checked('unstable'))text='No DVT symptoms selected; abnormal CXR or instability favours CTPA in the KEMH pathway.';
+   else text='No DVT symptoms, normal CXR/stable context: KEMH guidance generally favours V/Q as first-line, subject to local service/pathway.';
+   cls='positive';
+ }
+ else{text='Use the checklist to make the request specific and clinically answerable. Imaging choice remains dependent on the local protocol and patient context.';cls='warn'}
+ $('#ruleResult').className='ruleResult '+cls;$('#ruleResult').textContent=text;
+}
+function renderProtocol(){
+ const p=protocolById(state.protocol);
+ $('#protocolCategory').textContent=p.category;$('#protocolTitle').textContent=p.title;$('#protocolIntro').textContent=p.intro;
+ $('#protocolSource').href=p.source;$('#guardrail').textContent=p.guard;
+ renderCalculator(p);updateRuleResult();
+ $('#extraHistory').value='';$('#extraExam').value='';$('#extraSafety').value='';$('#extraQuestion').value=p.question||'';
+ $('#generatedRequest').textContent='Your request will appear here.';
+}
+function collectCriteria(p){
+ const out=[];
+ $$('[data-name]:checked').forEach(x=>out.push(x.parentElement.innerText.replace(/\s+/g,' ').trim()));
+ $$('[data-input]').forEach(x=>{if(x.value&&x.dataset.input!=='peLow')out.push(x.parentElement.firstElementChild?.textContent+': '+x.value)});
+ return out;
+}
+function generate(){
+ const p=protocolById(state.protocol);updateRuleResult();
+ const criteria=collectCriteria(p),h=$('#extraHistory').value.trim(),e=$('#extraExam').value.trim(),s=$('#extraSafety').value.trim(),q=$('#extraQuestion').value.trim()||p.question;
+ const lines=[];
+ lines.push(p.title.toUpperCase());
+ if(criteria.length)lines.push('Decision-rule / pathway details: '+criteria.join('; ')+'.');
+ if(h)lines.push('History/timing: '+h);
+ if(e)lines.push('Relevant exam/physiology: '+e);
+ if(s)lines.push('Safety/preparation: '+s);
+ lines.push('Clinical question: '+q);
+ lines.push('Rule/pathway summary: '+$('#ruleResult').textContent);
+ lines.push('Please review prior imaging where relevant and advise if an alternative protocol/modality is more appropriate.');
+ $('#generatedRequest').textContent=lines.join('\n\n');
+}
+$('#generateRequest').onclick=generate;
+$('#copyRequest').onclick=async()=>{try{await navigator.clipboard.writeText($('#generatedRequest').textContent);$('#copyMsg').textContent='Copied'}catch{$('#copyMsg').textContent='Select and copy manually'}setTimeout(()=>$('#copyMsg').textContent='',1400)};
+renderProtocolList();renderProtocol();
 })();
