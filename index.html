@@ -3,24 +3,189 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#071311">
-<title>RadRounds — Practical Radiology for the Ward</title>
-<meta name="description" content="Offline-first radiology learning and ward toolkit for medical students and junior doctors: real CT stacks, pathology patterns, stroke workflow and smarter imaging requests.">
+<meta name="theme-color" content="#07110f">
+<title>RadRounds — Scan Anatomy + WA Imaging Requests</title>
+<meta name="description" content="RadRounds: full real CT head stack with atlas-correlated anatomy hover, plus Western Australia guideline-directed imaging request generation.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="topbar"><div class="shell nav"><a class="brand" href="#home" data-page="home"><span class="brandmark"></span>RadRounds</a><button class="hamb" id="hamb" aria-label="Open navigation">☰</button><nav class="navlinks" id="navlinks" aria-label="Main navigation"><button data-page="anatomy">Anatomy</button><button data-page="pathology">Pathology</button><button data-page="stroke">Stroke Lab</button><button data-page="rounds">On Rounds</button><button data-page="guidelines">Guidelines</button><button data-page="rounds" class="nav-cta">Build a request</button></nav></div></header>
+<header class="topbar">
+  <div class="shell nav">
+    <a class="brand" href="#scan"><span class="brandmark">R</span><span>RadRounds</span></a>
+    <nav class="twonav">
+      <button class="navbtn active" data-page="scan">SCAN</button>
+      <button class="navbtn" data-page="request">REQUEST</button>
+    </nav>
+  </div>
+</header>
+
 <main>
-<section id="home" class="page active"><div class="shell"><div class="hero"><div><span class="pill"><span class="dot"></span>real CT anatomy • ward-ready</span><div style="height:20px"></div><div class="eyebrow">Practical radiology for junior doctors</div><h1>Learn the scan.<br><span style="color:var(--mint)">Use it clinically.</span></h1><p>Scroll real CT anatomy, practise an interpretation routine, recognise urgent patterns, work through the acute stroke imaging pathway, and write imaging requests that answer an actual clinical question.</p><div class="btns"><button class="btn primary" data-page="anatomy">Open the CT viewer</button><button class="btn" data-page="rounds">Build a request</button></div><p class="tiny" style="margin-top:18px">Educational support only — not a diagnostic viewer or medical device. Follow local policy and senior/radiology advice for patient care.</p></div><div class="hero-viewer" id="heroViewer"><div class="viewer-top"><span>NCCT HEAD · BRAIN</span><span id="heroSlice">AXIAL</span></div><canvas id="heroCanvas" width="512" height="512" aria-label="Scrollable real head CT"></canvas><span class="corner r">R</span><span class="corner l">L</span><div class="viewer-hint">scroll / drag through the real CT stack</div></div></div><div class="hero-stats"><div class="stat"><b>73</b><span>source-covered volumetric CT levels</span></div><div class="stat"><b>7+</b><span>real CT reference stacks + volume</span></div><div class="stat"><b>9</b><span>high-yield pathology patterns</span></div><div class="stat"><b>1</b><span>ward-focused workflow</span></div></div>
-<section class="section"><div class="sectionhead"><div><div class="eyebrow">One site, four jobs</div><h2>From pixels to decisions.</h2></div><p>RadRounds separates observation from action: first build the visual pattern, then connect it to the request, escalation and next imaging question.</p></div><div class="cards"><article class="card click" data-page="anatomy"><div class="num">01 / ANATOMY</div><h3>Scroll real CT</h3><p>Head, chest, abdomen, renal levels, pelvis and CTA stacks. Orientation, structured review, hideable teaching labels and slice quizzes.</p></article><article class="card click" data-page="pathology"><div class="num">02 / PATHOLOGY</div><h3>Recognise the urgent pattern</h3><p>Stroke, haemorrhage, PE, pneumothorax, AAA, obstruction, appendicitis and cauda equina: what you look for and what the finding changes.</p></article><article class="card click" data-page="rounds"><div class="num">03 / ON ROUNDS</div><h3>Order imaging better</h3><p>Turn a ward story into a concise radiology request with the correct scan-specific information and a clinically useful question.</p></article></div></section>
-</div></section>
-<section id="anatomy" class="page"><div class="shell"><div class="pagehead"><div class="eyebrow">Anatomy lab</div><h2>Know normal before you chase abnormal.</h2><p>These are real, de-identified/open teaching CT sources. Scroll with the wheel, drag vertically, arrow keys, or the slice bar. Anatomy labels are deliberately broad and level-based so they do not pretend to be pixel-perfect segmentation.</p></div><div class="workspace"><aside class="side" id="studyList"><h4>Study</h4></aside><section class="pacs" tabindex="0" id="pacs"><div class="pacsbar"><button class="tool active" id="labelsBtn">Labels</button><button class="tool" id="invertBtn">Invert</button><button class="tool" id="resetBtn">Reset</button><span style="margin-left:auto" class="tiny mono" id="presetMeta"></span></div><div class="pacsbody"><div class="scanwrap"><canvas id="scanCanvas" class="scanCanvas" width="512" height="512"></canvas><div class="scanmeta" id="scanMeta"></div><div class="scanmeta scanright" id="scanRight"></div><span class="corner r">R</span><span class="corner l">L</span><div class="labelbox on" id="labelBox"><b>Structures at this level</b><ul id="labelList"></ul></div></div></div><div class="pacsfooter"><span class="sliceval" id="sliceVal">1 / 1</span><input aria-label="CT slice" type="range" id="sliceRange" min="0" max="10" value="0"><span class="tiny mono">↑ ↓ / wheel</span></div></section><aside class="inspector"><h4>Review routine</h4><div class="block"><div class="check"><i>01</i><span>Confirm study, plane and orientation.</span></div><div class="check"><i>02</i><span>Trace the edge before the centre.</span></div><div class="check"><i>03</i><span>Compare paired structures for symmetry.</span></div><div class="check"><i>04</i><span>Review the full stack — never a single hero slice.</span></div></div><div class="block"><b class="tiny mono">STACK PROGRESS</b><div class="progress" style="margin-top:8px"><span id="stackProgress"></span></div><p class="tiny" id="sourceNote"></p></div><div class="block"><div class="quizbox"><b class="tiny mono">SLICE QUIZ</b><p id="quizQ">What should you deliberately inspect at this level?</p><div id="quizOpts"></div><div class="answer" id="quizAnswer"></div></div></div></aside></div></div></section>
-<section id="pathology" class="page"><div class="shell"><div class="pagehead"><div class="eyebrow">Pattern library</div><h2>See the pattern. Ask what it changes.</h2><p>These cases teach recognition and radiology-centred next steps. Card images are real normal/reference CT frames where available; they are <b>not</b> presented as the actual pathology case unless explicitly stated. The pathology is taught in the findings and decision framework.</p></div><div class="filters" id="caseFilters"></div><div class="casegrid" id="caseGrid"></div></div></section>
-<section id="stroke" class="page"><div class="shell"><div class="pagehead"><div class="eyebrow">Stroke lab</div><h2>NCCT → CTA → escalation.</h2><p>A junior-doctor workflow for acute stroke imaging: establish haemorrhage status, look for early ischaemic change and mimics, define the vessel question, then communicate the result and timing clearly. Local stroke pathways and specialist advice take precedence.</p></div><div class="strokegrid"><aside class="timeline" id="strokeSteps"></aside><section class="strokepanel"><div class="strokeviewer"><canvas id="strokeCanvas" width="512" height="512"></canvas><div class="scanmeta" id="strokeMeta"></div><span class="corner r">R</span><span class="corner l">L</span></div><div class="workflow" id="strokeContent"></div></section></div></div></section>
-<section id="rounds" class="page"><div class="shell"><div class="pagehead"><div class="eyebrow">On rounds</div><h2>Make the request answerable.</h2><p>The useful request is not “pain ?cause”. It tells radiology what happened, what you found, the important safety context, and the precise clinical question the scan needs to answer.</p></div><div class="tabs" id="roundTabs"><button class="tab active" data-tool="request">Request builder</button><button class="tab" data-tool="scan">What scan?</button><button class="tab" data-tool="call">Call radiology</button><button class="tab" data-tool="report">Read the report</button><button class="tab" data-tool="safety">Contrast / MRI</button><button class="tab" data-tool="critical">Critical result loop</button></div><div class="toolpanel active" id="tool-request"><div class="roundgrid"><div class="formpanel"><div class="alert" style="margin-bottom:15px">Do not enter patient identifiers into this educational tool. Use your clinical system for real patient details.</div><div class="field"><label>STUDY / REGION</label><select id="reqStudy"><option>CT brain</option><option>CTA head/neck</option><option>CT pulmonary angiogram</option><option>CT abdomen/pelvis</option><option>CT KUB</option><option>MRI spine</option><option>Ultrasound abdomen</option><option>Chest X-ray</option></select></div><div class="field"><label>CLINICAL SCENARIO</label><select id="reqScenario"><option value="free">Free text</option><option value="stroke">Acute focal neurology</option><option value="pe">Suspected pulmonary embolism</option><option value="abdo">Acute abdominal pain</option><option value="renal">Renal colic</option><option value="cauda">Possible cauda equina</option><option value="sepsis">Sepsis / source unclear</option></select></div><div class="field"><label>HISTORY & TIMING</label><textarea id="reqHistory" placeholder="Onset, duration, mechanism, relevant diagnosis/treatment..."></textarea><div class="smarttips" id="historyTips"></div></div><div class="field"><label>KEY EXAM / OBSERVATIONS</label><textarea id="reqExam" placeholder="Relevant positives and negatives; haemodynamic/neurological status..."></textarea></div><div class="field"><label>RELEVANT LABS / RISKS</label><textarea id="reqLabs" placeholder="Renal function where relevant, pregnancy possibility, anticoagulation, prior contrast reaction, MRI devices..."></textarea></div><div class="field"><label>CLINICAL QUESTION</label><textarea id="reqQuestion" placeholder="e.g. Intracranial haemorrhage? LVO? PE? obstruction/perforation? stone and hydronephrosis?"></textarea><div class="smarttips" id="questionTips"></div></div><button class="btn primary" id="buildReq">Build request</button></div><aside class="outputpanel"><div class="eyebrow">Draft</div><h3 style="margin:7px 0 14px">Radiology request</h3><div class="request" id="requestOut">Complete the fields, then build your request.</div><button class="btn" style="width:100%;margin-top:10px" id="copyReq">Copy</button><div class="copymsg" id="copyMsg"></div></aside></div></div><div class="toolpanel" id="tool-scan"></div><div class="toolpanel" id="tool-call"></div><div class="toolpanel" id="tool-report"></div><div class="toolpanel" id="tool-safety"></div><div class="toolpanel" id="tool-critical"></div></div></section>
-<section id="guidelines" class="page"><div class="shell"><div class="pagehead"><div class="eyebrow">References & sources</div><h2>Know when to leave the cheat sheet.</h2><p>RadRounds is a learning interface, not a replacement for local imaging protocols, specialist advice or current guidelines. Use these authoritative sources when a real clinical decision depends on it.</p></div><div class="guides"><article class="guide"><span class="pill">Stroke</span><h3 style="margin-top:14px">Stroke Foundation — Clinical Guidelines</h3><p>Australian evidence-based stroke guidance and links to the evolving living guideline platform.</p><a href="https://strokefoundation.org.au/what-we-do/for-health-professionals/clinical-guidelines" target="_blank" rel="noopener">Open official guideline ↗</a></article><article class="guide"><span class="pill">Contrast</span><h3 style="margin-top:14px">RANZCR — Iodinated Contrast Media</h3><p>RANZCR’s v2.3 guideline is undergoing review/update in 2026. Check the current college page and your local policy before acting.</p><a href="https://www.ranzcr.com/document/iodinated-contrast-guidelines-2016/" target="_blank" rel="noopener">Open RANZCR ↗</a></article><article class="guide"><span class="pill">WA stroke</span><h3 style="margin-top:14px">WA Statewide Telestroke Service</h3><p>24/7 specialist support for regional hospitals; the operational pathway and contact process should be taken from your local hospital protocol.</p><a href="https://www.health.wa.gov.au/News/2025/Telestroke-boosts-care-for-regional-and-remote-stroke-patients" target="_blank" rel="noopener">WA Health overview ↗</a></article><article class="guide"><span class="pill">Appropriateness</span><h3 style="margin-top:14px">RANZCR clinical decision support</h3><p>Use recognised imaging-appropriateness guidance and your health service protocols for modality selection, especially where radiation, contrast, pregnancy or urgent specialist pathways are involved.</p><a href="https://www.ranzcr.com/" target="_blank" rel="noopener">RANZCR ↗</a></article></div><div class="credits"><b>Imaging source notes</b><p>Head reference stack: Mikael Häggström, M.D., “CT of a normal brain, axial plane”, CC0. Chest/abdomen/renal/pelvis teaching stacks: AortaSeg-60 (Dania El Rahal, David C. Rotzinger, Guillaume Fahrni), source metadata conservatively attributed as CC BY 4.0; the source has a pacemaker and is not claimed to be an entirely normal examination. Volumetric head grid: NLM Visible Human “HARVARD 02” head, redistributed through the Neuroaxis Atlas source repository. CTA stacks are educational acquisition references, not disease-specific patient cases.</p><details><summary>Why RadRounds labels some images “reference”</summary><p>It is better to show a real normal/reference image and explicitly teach the abnormal pattern in text than to pass off a generated pseudo-scan as genuine pathology. When an image is a reference rather than the pathology case, the site says so.</p></details></div></div></section>
+<section id="scan" class="page active">
+  <div class="shell">
+    <div class="pagehead splithead">
+      <div>
+        <div class="eyebrow">01 / SCAN</div>
+        <h1>Scroll the whole scan.<br><span>Know what you’re looking at.</span></h1>
+      </div>
+      <p>41 consecutive real non-contrast CT head images, shown at their original 646×468 source resolution. Hover over the anatomy for an atlas-correlated structure readout. Scroll, drag, or use the arrow keys to move through the study.</p>
+    </div>
+
+    <div class="scanlayout">
+      <aside class="scanrail">
+        <div class="railblock">
+          <div class="railtitle">STUDY</div>
+          <div class="studyname">Normal NCCT head</div>
+          <div class="tiny">Axial · 4 mm · 41 slices</div>
+        </div>
+        <div class="railblock">
+          <div class="railtitle">CONTROLS</div>
+          <div class="keyrow"><kbd>Wheel</kbd><span>scroll slices</span></div>
+          <div class="keyrow"><kbd>↑ ↓</kbd><span>scroll slices</span></div>
+          <div class="keyrow"><kbd>Drag</kbd><span>scroll slices</span></div>
+          <div class="keyrow"><kbd>Hover</kbd><span>inspect anatomy</span></div>
+        </div>
+        <div class="railblock">
+          <div class="railtitle">ANATOMY MODE</div>
+          <label class="toggle"><input type="checkbox" id="atlasToggle" checked><span></span> Atlas-correlated hover</label>
+          <p class="tiny">The hover labels are registered atlas candidates, not patient-specific segmentation. Use them as a learning aid, not as a diagnostic overlay.</p>
+        </div>
+        <div class="railblock sourcebox">
+          <div class="railtitle">SOURCE</div>
+          <p class="tiny">Mikael Häggström, M.D. — “CT of a normal brain, axial plane (case 1)”, CC0. Original PNGs from Wikimedia Commons.</p>
+          <a target="_blank" rel="noopener" href="https://commons.wikimedia.org/wiki/Category:Computed_tomography_of_normal_brain_in_axial_plane_(case_1)">Open source ↗</a>
+        </div>
+      </aside>
+
+      <section class="viewer" id="viewer" tabindex="0" aria-label="Scrollable CT head study">
+        <div class="viewerbar">
+          <div><b>NCCT HEAD</b><span> · NORMAL REFERENCE</span></div>
+          <div class="viewerbar-right"><span id="loadState">loading</span><span>R ← → L</span></div>
+        </div>
+        <div class="stage" id="stage">
+          <img id="ctImg" alt="Axial CT head slice" draggable="false">
+          <div class="orientation o-r">R</div>
+          <div class="orientation o-l">L</div>
+          <div class="orientation o-a">A</div>
+          <div class="orientation o-p">P</div>
+          <div class="sliceoverlay">
+            <div>SLICE <b id="sliceNumber">21</b> / 41</div>
+            <div id="sliceLevel">mid cranial</div>
+          </div>
+          <div class="hoverdot" id="hoverDot"></div>
+          <div class="tooltip" id="anatomyTip">
+            <div class="tooltip-kicker">ATLAS-CORRELATED ANATOMY</div>
+            <div class="tooltip-title" id="tipTitle">Move over the scan</div>
+            <div class="tooltip-sub" id="tipSub">Detailed candidate structures appear here.</div>
+            <div class="tiplist" id="tipList"></div>
+          </div>
+        </div>
+        <div class="scrubber">
+          <span class="mono" id="sliceLeft">01</span>
+          <input id="sliceRange" type="range" min="1" max="41" value="21" aria-label="CT slice">
+          <span class="mono">41</span>
+        </div>
+      </section>
+
+      <aside class="anatomyrail">
+        <div class="railtitle">THIS LEVEL</div>
+        <h3 id="levelTitle">Basal ganglia / ventricular level</h3>
+        <p id="levelText">Hover the image to identify deeper structures at the cursor position.</p>
+        <div class="leveltags" id="levelTags"></div>
+        <div class="detailcard">
+          <div class="railtitle">HOVER READOUT</div>
+          <div class="bigread" id="sidePrimary">—</div>
+          <div id="sideCandidates" class="candidateList"></div>
+        </div>
+        <div class="detailcard">
+          <div class="railtitle">SYSTEMATIC READ</div>
+          <div class="checkline"><span>01</span> Blood</div>
+          <div class="checkline"><span>02</span> Cisterns / sulci</div>
+          <div class="checkline"><span>03</span> Brain symmetry</div>
+          <div class="checkline"><span>04</span> Ventricles</div>
+          <div class="checkline"><span>05</span> Bone / extracranial</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="request" class="page">
+  <div class="shell">
+    <div class="pagehead splithead">
+      <div>
+        <div class="eyebrow">02 / REQUEST</div>
+        <h1>Build the request<br><span>from the guideline.</span></h1>
+      </div>
+      <p>Select the clinical problem. RadRounds applies the relevant validated imaging decision rule or WA pathway prompts, shows whether the rule is applicable, then generates the concise clinical information and question a radiology request should contain.</p>
+    </div>
+
+    <div class="requestlayout">
+      <aside class="protocolrail">
+        <div class="railtitle">CLINICAL PATHWAY</div>
+        <div id="protocolList"></div>
+      </aside>
+
+      <section class="protocolmain">
+        <div class="protocolhead">
+          <div>
+            <div class="eyebrow" id="protocolCategory">TRAUMA</div>
+            <h2 id="protocolTitle">Minor head injury</h2>
+            <p id="protocolIntro"></p>
+          </div>
+          <a id="protocolSource" class="sourcebtn" target="_blank" rel="noopener">Official source ↗</a>
+        </div>
+
+        <div class="guardrail" id="guardrail"></div>
+        <div class="calculator" id="calculator"></div>
+
+        <div class="clinicalgrid">
+          <div>
+            <label>Additional clinical history / timing</label>
+            <textarea id="extraHistory" placeholder="Add details not captured above: onset, mechanism, prior imaging, relevant treatment, operative history..."></textarea>
+          </div>
+          <div>
+            <label>Relevant exam / physiology</label>
+            <textarea id="extraExam" placeholder="Relevant positives and negatives, observations, neurological status, haemodynamic stability..."></textarea>
+          </div>
+          <div>
+            <label>Safety / preparation context</label>
+            <textarea id="extraSafety" placeholder="Renal function if relevant, pregnancy possibility, anticoagulation, contrast reaction, MRI device/safety information..."></textarea>
+          </div>
+          <div>
+            <label>Your specific imaging question</label>
+            <textarea id="extraQuestion" placeholder="What exactly should the scan answer?"></textarea>
+          </div>
+        </div>
+
+        <button class="primarybtn" id="generateRequest">GENERATE RADIOLOGY REQUEST</button>
+      </section>
+
+      <aside class="requestoutput">
+        <div class="railtitle">RULE RESULT</div>
+        <div class="ruleResult" id="ruleResult">Complete the pathway.</div>
+        <div class="railtitle outputlabel">GENERATED REQUEST</div>
+        <pre id="generatedRequest">Your request will appear here.</pre>
+        <button class="copybtn" id="copyRequest">Copy request</button>
+        <div class="copymsg" id="copyMsg"></div>
+
+        <div class="sourcespanel">
+          <div class="railtitle">WA / AUSTRALIAN SOURCES</div>
+          <a target="_blank" rel="noopener" href="https://www.wacountry.health.wa.gov.au/~/media/WACHS/Documents/About-us/Policies/Imaging-Clinical-Practice-Standard.PDF?thn=0">WACHS Imaging Clinical Practice Standard ↗</a>
+          <a target="_blank" rel="noopener" href="https://www.ranzcr.com/our-work/quality-standards/education-modules">RANZCR imaging decision rules ↗</a>
+          <a target="_blank" rel="noopener" href="https://www.wacountry.health.wa.gov.au/News/2026/09/18/Telestroke-milestone-strengthens-access-to-lifesaving-care">WA Statewide Telestroke ↗</a>
+          <a target="_blank" rel="noopener" href="https://www.kemh.health.wa.gov.au/For-Health-Professionals/Clinical-Guidelines/Obs-Gyn-Guidelines">KEMH / WNHS guidelines ↗</a>
+        </div>
+      </aside>
+    </div>
+
+    <div class="disclaimer">
+      <b>Clinical use:</b> This is an educational/referral-support interface. Decision rules only apply to the populations in which they were validated. Confirm exclusions, current local policy, local laboratory thresholds and senior/radiology advice before acting. Do not enter patient identifiers.
+    </div>
+  </div>
+</section>
 </main>
-<div class="drawer" id="drawer"><div class="drawerpanel"><button class="xbtn" id="closeDrawer">✕</button><div id="drawerContent"></div></div></div>
+
 <script src="data.js"></script>
 <script src="app.js" defer></script>
-</body></html>
+</body>
+</html>
